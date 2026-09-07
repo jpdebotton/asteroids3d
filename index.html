@@ -37,6 +37,18 @@
     .control { color: #8b9eae; font-size: 11px; display: grid; gap: 12px; }
     kbd { display: inline-block; border: 1px solid #354654; border-bottom-width: 3px; border-radius: 4px; padding: 6px 9px; color: #e3edf4; font: 12px ui-monospace, monospace; background: #101c29; }
     .note { font: 10px ui-monospace, monospace; color: #657d8d; line-height: 1.8; }
+    .touch-note, .touch-controls { display: none; }
+    .supports-touch .touch-note { display: block; }
+    .supports-touch .keyboard-note, .supports-touch .controls { display: none; }
+    .supports-touch .touch-controls { display: flex; }
+    .touch-controls { position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); left: max(18px, env(safe-area-inset-left)); right: max(18px, env(safe-area-inset-right)); justify-content: space-between; gap: 12px; pointer-events: none; }
+    .touch-group { display: flex; gap: 8px; }
+    .touch-button { width: clamp(56px, 16vw, 76px); min-height: 68px; display: grid; place-content: center; gap: 5px; border: 1px solid #42665f; border-radius: 12px; background: #091b24e6; color: #baffea; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+    .touch-button span { font-size: 24px; line-height: 1; }
+    .touch-button small { font: 9px ui-monospace, monospace; letter-spacing: .06em; }
+    .touch-button.is-pressed { color: #062219; background: #7bf6d2; border-color: #baffea; }
+    .playing-touch .bottom { margin-bottom: 86px; }
+    .touch-note { margin-top: 24px; }
     #toast { position: fixed; top: 110px; left: 50%; transform: translateX(-50%); color: #7bf6d2; font: 12px ui-monospace, monospace; letter-spacing: .18em; pointer-events: none; text-align: center; }
     #final-score { color: #7bf6d2; font: 42px ui-monospace, monospace; margin: 20px; }
     #error { position: fixed; inset: 25%; padding: 35px; background: #101c29; border: 1px solid #7bf6d2; z-index: 10; text-align: center; line-height: 1.7; }
@@ -58,6 +70,16 @@
     <div class="bottom"><span>SECTOR 07 / DEEP FIELD<br>THREE HULLS. OPEN SPACE.</span><div class="actions"><button id="pause" class="small" hidden>PAUSE [P]</button><button id="mute" class="small" aria-pressed="false">SOUND ON [M]</button></div></div>
   </div>
   <div id="toast" role="status"></div>
+  <div id="touch-controls" class="touch-controls" role="group" aria-label="Flight controls" hidden>
+    <div class="touch-group">
+      <button type="button" class="touch-button" data-key="ArrowLeft" aria-label="Rotate left"><span aria-hidden="true">↶</span><small>LEFT</small></button>
+      <button type="button" class="touch-button" data-key="ArrowRight" aria-label="Rotate right"><span aria-hidden="true">↷</span><small>RIGHT</small></button>
+    </div>
+    <div class="touch-group">
+      <button type="button" class="touch-button" data-key="ArrowUp" aria-label="Thrust"><span aria-hidden="true">↑</span><small>THRUST</small></button>
+      <button type="button" class="touch-button" data-key="Space" aria-label="Fire"><span aria-hidden="true">◎</span><small>FIRE</small></button>
+    </div>
+  </div>
   <section id="menu" class="overlay">
     <div class="panel">
       <div class="eyebrow">AN ORBITAL SURVIVAL GAME</div>
@@ -69,7 +91,8 @@
         <div class="control"><div><kbd>↑</kbd></div><span>THRUST</span></div>
         <div class="control"><div><kbd>SPACE</kbd></div><span>FIRE</span></div>
       </div>
-      <div class="note">Depth-piercing shots · Edges wrap · P to pause<br>Click launch to enable synthesized audio. Keyboard required.</div>
+      <div class="note keyboard-note">Depth-piercing shots · Edges wrap · P to pause<br>Click launch to enable synthesized audio. Keyboard required.</div>
+      <div class="note touch-note">Hold the on-screen buttons to rotate, thrust and fire.<br>Use multiple fingers to steer and shoot together.<br>Tap launch to enable audio. Tap PAUSE to take a break.</div>
     </div>
   </section>
   <section id="paused" class="overlay" hidden><div class="panel"><div class="eyebrow">FLIGHT ON HOLD</div><h1>PAUSED</h1><p class="subtitle">Take a breath. The field can wait.</p><button id="resume" class="primary">RESUME FLIGHT</button></div></section>

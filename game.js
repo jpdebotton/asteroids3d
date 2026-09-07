@@ -13,6 +13,27 @@ const WORLD = { x: 36, y: 23, z: 7 };
 const RADII = [0.8, 1.55, 2.8];
 const POINTS = [100, 50, 20];
 const keys = new Set();
+const touchPointers = new Map();
+const touchButtons = [...document.querySelectorAll('.touch-button')];
+const hasTouch = navigator.maxTouchPoints > 0;
+document.documentElement.classList.toggle('supports-touch', hasTouch);
+function inputDown(code) {
+  return keys.has(code) || [...touchPointers.values()].some(button => button.dataset.key === code);
+}
+function clearInput() {
+  keys.clear();
+  const captured = [...touchPointers];
+  touchPointers.clear();
+  touchButtons.forEach(button => button.classList.remove('is-pressed'));
+  for (const [pointerId, button] of captured) {
+    if (button.hasPointerCapture(pointerId)) button.releasePointerCapture(pointerId);
+  }
+}
+function updateTouchControls() {
+  const visible = hasTouch && mode === 'playing';
+  $('touch-controls').hidden = !visible;
+  document.documentElement.classList.toggle('playing-touch', visible);
+}
 const asteroids = [], bullets = [], particles = [];
 let mode = 'menu', score = 0, lives = 3, wave = 1;
 let heading = 0, cooldown = 0, invincible = 0, nextWave = 0, toastTime = 0;
@@ -225,17 +246,19 @@ function respawn() {
 }
 function start() {
   for (const array of [asteroids, bullets, particles]) while (array.length) remove(array, array.length - 1);
-  keys.clear(); score = 0; lives = 3; wave = 1; cooldown = 0; nextWave = 0; shake = 0;
+  clearInput(); score = 0; lives = 3; wave = 1; cooldown = 0; nextWave = 0; shake = 0;
   mode = 'playing'; accumulator = 0; respawn(); spawnWave(); updateHUD();
   $('menu').hidden = $('over').hidden = $('paused').hidden = true;
   $('pause').hidden = false;
+  updateTouchControls();
   document.activeElement?.blur();
 }
 function pause() {
   if (mode !== 'playing' && mode !== 'paused') return;
   mode = mode === 'playing' ? 'paused' : 'playing';
   $('paused').hidden = mode !== 'paused';
-  keys.clear(); audio.thrust(false); accumulator = 0;
+  clearInput(); audio.thrust(false); accumulator = 0;
+  updateTouchControls();
   document.activeElement?.blur();
 }
 function fire() {
@@ -265,10 +288,11 @@ function hitRock(index) {
 }
 function loseLife() {
   burst(ship.position, 50, 0, 12); audio.explosion(3); shake = 0.65;
-  lives--; updateHUD(); keys.clear(); audio.thrust(false);
+  lives--; updateHUD(); clearInput(); audio.thrust(false);
   if (lives > 0) { respawn(); announce('HULL LOST / SHIELD ACTIVE'); }
   else {
     mode = 'over'; ship.visible = false; $('over').hidden = false; $('pause').hidden = true;
+    updateTouchControls();
     $('final-score').textContent = String(score).padStart(6, '0');
     $('result').textContent = `You reached wave ${String(wave).padStart(2, '0')}. The field remembers.`;
     $('toast').textContent = ''; audio.tone(220, 45, 0.8, 0.3, 'triangle');
@@ -292,9 +316,9 @@ function step(dt) {
   shake = Math.max(0, shake - dt * 1.5);
   if (toastTime > 0) { toastTime -= dt; if (toastTime <= 0) $('toast').textContent = ''; }
   if (mode !== 'playing') return;
-  heading += ((keys.has('ArrowLeft') ? 1 : 0) - (keys.has('ArrowRight') ? 1 : 0)) * 3.7 * dt;
+  heading += ((inputDown('ArrowLeft') ? 1 : 0) - (inputDown('ArrowRight') ? 1 : 0)) * 3.7 * dt;
   ship.rotation.z = heading;
-  const thrusting = keys.has('ArrowUp');
+  const thrusting = inputDown('ArrowUp');
   if (thrusting) {
     velocity.x -= Math.sin(heading) * 19 * dt; velocity.y += Math.cos(heading) * 19 * dt;
     if (velocity.length() > 23) velocity.setLength(23);
@@ -307,7 +331,7 @@ function step(dt) {
   shield.visible = invincible > 0;
   ship.visible = invincible <= 0 || Math.sin(elapsed * 23) > -0.5;
   cooldown -= dt;
-  if (keys.has('Space') && cooldown <= 0) fire();
+  if (inputDown('Space') && cooldown <= 0) fire();
   for (let i = bullets.length - 1; i >= 0; i--) {
     const bullet = bullets[i]; bullet.life -= dt;
     if (bullet.life <= 0) { remove(bullets, i); continue; }
@@ -335,6 +359,26 @@ $('restart').addEventListener('click', start);
 $('pause').addEventListener('click', pause);
 $('resume').addEventListener('click', pause);
 $('mute').addEventListener('click', () => audio.toggle());
+// Track each finger separately; capture keeps releases reliable outside a button.
+for (const button of touchButtons) {
+  button.addEventListener('pointerdown', event => {
+    if (!hasTouch || mode !== 'playing' || event.button !== 0) return;
+    event.preventDefault();
+    button.setPointerCapture(event.pointerId);
+    touchPointers.set(event.pointerId, button);
+    button.classList.add('is-pressed');
+  });
+  const release = event => {
+    if (touchPointers.get(event.pointerId) !== button) return;
+    touchPointers.delete(event.pointerId);
+    if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
+    button.classList.toggle('is-pressed', [...touchPointers.values()].includes(button));
+  };
+  button.addEventListener('pointerup', release);
+  button.addEventListener('pointercancel', release);
+  button.addEventListener('lostpointercapture', release);
+  button.addEventListener('contextmenu', event => event.preventDefault());
+}
 window.addEventListener('keydown', event => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(event.code)) {
     // Preserve native keyboard activation of menu buttons.
@@ -344,7 +388,7 @@ window.addEventListener('keydown', event => {
   if (!event.repeat && event.code === 'KeyM') audio.toggle();
 });
 window.addEventListener('keyup', event => keys.delete(event.code));
-window.addEventListener('blur', () => { keys.clear(); if (mode === 'playing') pause(); });
+window.addEventListener('blur', () => { clearInput(); if (mode === 'playing') pause(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'playing') pause(); });
 renderer.domElement.addEventListener('webglcontextlost', event => {
   event.preventDefault(); if (mode === 'playing') pause();
