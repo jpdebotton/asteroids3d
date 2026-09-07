@@ -15,10 +15,15 @@ const POINTS = [100, 50, 20];
 const keys = new Set();
 const touchPointers = new Map();
 const touchButtons = [...document.querySelectorAll('.touch-button')];
-const hasTouch = navigator.maxTouchPoints > 0;
+// Require a touch-first device, so mouse-driven desktops never show flight buttons.
+const touchDeviceQuery = matchMedia('(pointer: coarse) and (hover: none)');
+const portraitQuery = matchMedia('(orientation: portrait)');
+let hasTouch = navigator.maxTouchPoints > 0 && touchDeviceQuery.matches;
 document.documentElement.classList.toggle('supports-touch', hasTouch);
 function inputDown(code) {
-  return keys.has(code) || [...touchPointers.values()].some(button => button.dataset.key === code);
+  if (keys.has(code)) return true;
+  for (const button of touchPointers.values()) if (button.dataset.key === code) return true;
+  return false;
 }
 function clearInput() {
   keys.clear();
@@ -30,9 +35,20 @@ function clearInput() {
   }
 }
 function updateTouchControls() {
-  const visible = hasTouch && mode === 'playing';
+  const visible = hasTouch && !portraitQuery.matches && mode === 'playing';
   $('touch-controls').hidden = !visible;
   document.documentElement.classList.toggle('playing-touch', visible);
+}
+function updateTouchEnvironment() {
+  const wasTouch = hasTouch;
+  hasTouch = navigator.maxTouchPoints > 0 && touchDeviceQuery.matches;
+  document.documentElement.classList.toggle('supports-touch', hasTouch);
+  const portrait = hasTouch && portraitQuery.matches;
+  $('rotate-device').hidden = !portrait;
+  if (wasTouch || hasTouch) clearInput();
+  // Stay paused after turning back, so the player can settle their grip and resume.
+  if (portrait && mode === 'playing') pause();
+  updateTouchControls();
 }
 const asteroids = [], bullets = [], particles = [];
 let mode = 'menu', score = 0, lives = 3, wave = 1;
@@ -245,6 +261,7 @@ function respawn() {
   invincible = 3; ship.visible = true;
 }
 function start() {
+  if (hasTouch && portraitQuery.matches) return;
   for (const array of [asteroids, bullets, particles]) while (array.length) remove(array, array.length - 1);
   clearInput(); score = 0; lives = 3; wave = 1; cooldown = 0; nextWave = 0; shake = 0;
   mode = 'playing'; accumulator = 0; respawn(); spawnWave(); updateHUD();
@@ -255,6 +272,7 @@ function start() {
 }
 function pause() {
   if (mode !== 'playing' && mode !== 'paused') return;
+  if (mode === 'paused' && hasTouch && portraitQuery.matches) return;
   mode = mode === 'playing' ? 'paused' : 'playing';
   $('paused').hidden = mode !== 'paused';
   clearInput(); audio.thrust(false); accumulator = 0;
@@ -362,7 +380,7 @@ $('mute').addEventListener('click', () => audio.toggle());
 // Track each finger separately; capture keeps releases reliable outside a button.
 for (const button of touchButtons) {
   button.addEventListener('pointerdown', event => {
-    if (!hasTouch || mode !== 'playing' || event.button !== 0) return;
+    if (!hasTouch || portraitQuery.matches || mode !== 'playing' || event.pointerType !== 'touch' || event.button !== 0) return;
     event.preventDefault();
     button.setPointerCapture(event.pointerId);
     touchPointers.set(event.pointerId, button);
@@ -377,8 +395,18 @@ for (const button of touchButtons) {
   button.addEventListener('pointerup', release);
   button.addEventListener('pointercancel', release);
   button.addEventListener('lostpointercapture', release);
-  button.addEventListener('contextmenu', event => event.preventDefault());
 }
+// CSS touch-action blocks native gestures; these also cover older iOS gesture handling.
+document.addEventListener('touchmove', event => event.preventDefault(), { passive: false });
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, event => event.preventDefault(), { passive: false });
+}
+for (const surface of [renderer.domElement, ...document.querySelectorAll('button')]) {
+  surface.addEventListener('contextmenu', event => event.preventDefault());
+}
+touchDeviceQuery.addEventListener('change', updateTouchEnvironment);
+portraitQuery.addEventListener('change', updateTouchEnvironment);
+updateTouchEnvironment();
 window.addEventListener('keydown', event => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(event.code)) {
     // Preserve native keyboard activation of menu buttons.
